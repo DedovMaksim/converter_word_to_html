@@ -54,12 +54,12 @@ def is_ordered_list(paragraph, doc):
                     './/w:numFmt', namespaces=numbering.nsmap)
                 if numFmt_elem is not None:
                     fmt = numFmt_elem.get(
-                        '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-                        'val'
+                        '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val'
                         )
                     return fmt != 'bullet'  # True → <ol>, False → <ul>
     except Exception as e:
         print(f"Ошибка определения типа списка: {e}")
+        print(f"List type definition error: {e}")
     return False
 
 
@@ -67,7 +67,7 @@ def docx_to_html(input_file, output_file):
     doc = Document(input_file)
     html_lines = []
     list_open = False
-    list_type = None  # "ul" или "ol"
+    list_type = None  # "ul" or "ol"
 
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
@@ -88,7 +88,7 @@ def docx_to_html(input_file, output_file):
 
         is_ordered = is_ordered_list(paragraph, doc)
 
-        # Заголовки
+        # Convert <h> - titles
         if 'heading 1' in style:
             if list_open:
                 html_lines.append(f"</{list_type}>")
@@ -99,7 +99,17 @@ def docx_to_html(input_file, output_file):
                 html_lines.append(f"</{list_type}>")
                 list_open = False
             html_lines.append(f"<h2>{text}</h2>")
-        # Списки
+        elif 'heading 3' in style:
+            if list_open:
+                html_lines.append(f"</{list_type}>")
+                list_open = False
+            html_lines.append(f"<h3>{text}</h3>")
+        elif 'heading 4' in style:
+            if list_open:
+                html_lines.append(f"</{list_type}>")
+                list_open = False
+            html_lines.append(f"<h4>{text}</h4>")
+        # Convert list
         elif is_list_item:
             current_list_type = "ol" if is_ordered else "ul"
             if not list_open or list_type != current_list_type:
@@ -110,7 +120,7 @@ def docx_to_html(input_file, output_file):
                 list_type = current_list_type
             content = get_formatted_text(paragraph)
             html_lines.append(f"<li>{content}</li>")
-        # Обычный абзац
+        # Convert paragraphs
         else:
             if list_open:
                 html_lines.append(f"</{list_type}>")
@@ -132,6 +142,8 @@ def docx_to_html(input_file, output_file):
 if __name__ == '__main__':
     try:
         docx_to_html('input.docx', 'output.html')
-        print("Конвертация успешно завершена!")
+        print("Конвертация успешно завершена!")  
+        print("Conversion completed successfully!")
     except Exception as e:
         print(f"Ошибка: {str(e)}")
+        print(f"Error: {str(e)}")
