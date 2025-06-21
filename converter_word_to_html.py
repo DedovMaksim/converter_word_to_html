@@ -22,8 +22,36 @@ def format_run(run):
     return text
 
 
-def get_formatted_text(paragraph):
-    return ''.join(format_run(run) for run in paragraph.runs)
+def get_formatted_paragraph_html(paragraph):
+    html = ""
+    for child in paragraph._element:
+        tag = child.tag.lower()
+        if tag.endswith('}r'):  # paragraphs (run)
+            for run in paragraph.runs:
+                if run.text in child.text or run.text.strip() in child.text:
+                    html += format_run(run)
+                    break
+        elif tag.endswith('}hyperlink'):  # hyperlink
+            html += format_hyperlink(child, paragraph)
+    return html
+
+
+def format_hyperlink(hyperlink_elem, paragraph):
+    r_id = hyperlink_elem.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+    if not r_id:
+        return ""
+
+    rel = paragraph.part.rels.get(r_id)
+    href = rel.target_ref if rel else "#"
+
+    text_parts = []
+    for run_elem in hyperlink_elem.findall('.//w:r', paragraph._element.nsmap):
+        texts = run_elem.findall('.//w:t', paragraph._element.nsmap)
+        for t in texts:
+            text_parts.append(t.text)
+
+    text = ''.join(text_parts)
+    return f'<a href="{href}">{text}</a>'
 
 
 def is_ordered_list(paragraph, doc):
@@ -39,12 +67,15 @@ def is_ordered_list(paragraph, doc):
             namespaces=numbering.nsmap)
 
         if num_elem is not None:
-            abstract_id = num_elem.find(
+            abstract_id_elem = num_elem.find(
                 './w:abstractNumId',
-                namespaces=numbering.nsmap
-                ).get(
-                    '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val'
-                )
+                namespaces=numbering.nsmap)
+            if abstract_id_elem is None:
+                return False
+
+            abstract_id = abstract_id_elem.get(
+                '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val'
+            )
             abstract_elem = numbering.find(
                 f'.//w:abstractNum[@w:abstractNumId="{abstract_id}"]',
                 namespaces=numbering.nsmap)
@@ -55,8 +86,8 @@ def is_ordered_list(paragraph, doc):
                 if numFmt_elem is not None:
                     fmt = numFmt_elem.get(
                         '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val'
-                        )
-                    return fmt != 'bullet'  # True → <ol>, False → <ul>
+                    )
+                    return fmt != 'bullet'  # bullet → <ul>, иначе <ol>
     except Exception as e:
         print(f"Ошибка определения типа списка: {e}")
         print(f"List type definition error: {e}")
@@ -87,29 +118,39 @@ def docx_to_html(input_file, output_file):
         )
 
         is_ordered = is_ordered_list(paragraph, doc)
+        content = get_formatted_paragraph_html(paragraph)
 
         # Convert <h> - titles
         if 'heading 1' in style:
             if list_open:
                 html_lines.append(f"</{list_type}>")
                 list_open = False
-            html_lines.append(f"<h1>{text}</h1>")
+            html_lines.append(f"<h1>{content}</h1>")
         elif 'heading 2' in style:
             if list_open:
                 html_lines.append(f"</{list_type}>")
                 list_open = False
-            html_lines.append(f"<h2>{text}</h2>")
+            html_lines.append(f"<h2>{content}</h2>")
         elif 'heading 3' in style:
             if list_open:
                 html_lines.append(f"</{list_type}>")
                 list_open = False
-            html_lines.append(f"<h3>{text}</h3>")
+            html_lines.append(f"<h3>{content}</h3>")
         elif 'heading 4' in style:
             if list_open:
                 html_lines.append(f"</{list_type}>")
                 list_open = False
-            html_lines.append(f"<h4>{text}</h4>")
-        # Convert list
+            html_lines.append(f"<h4>{content}</h4>")
+        elif 'heading 5' in style:
+            if list_open:
+                html_lines.append(f"</{list_type}>")
+                list_open = False
+            html_lines.append(f"<h5>{content}</h5>")
+        elif 'heading 6' in style:
+            if list_open:
+                html_lines.append(f"</{list_type}>")
+                list_open = False
+            html_lines.append(f"<h6>{content}</h6>")
         elif is_list_item:
             current_list_type = "ol" if is_ordered else "ul"
             if not list_open or list_type != current_list_type:
@@ -118,22 +159,17 @@ def docx_to_html(input_file, output_file):
                 html_lines.append(f"<{current_list_type}>")
                 list_open = True
                 list_type = current_list_type
-            content = get_formatted_text(paragraph)
             html_lines.append(f"<li>{content}</li>")
-        # Convert paragraphs
         else:
             if list_open:
                 html_lines.append(f"</{list_type}>")
                 list_open = False
-            content = get_formatted_text(paragraph)
             html_lines.append(f"<p>{content}</p>")
 
     if list_open:
         html_lines.append(f"</{list_type}>")
 
-    html_content = f"""
-{"\n".join(html_lines)}
-"""
+    html_content = "\n".join(html_lines)
 
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html_content)
@@ -142,7 +178,7 @@ def docx_to_html(input_file, output_file):
 if __name__ == '__main__':
     try:
         docx_to_html('input.docx', 'output.html')
-        print("Конвертация успешно завершена!")  
+        print("Конвертация успешно завершена!")
         print("Conversion completed successfully!")
     except Exception as e:
         print(f"Ошибка: {str(e)}")
