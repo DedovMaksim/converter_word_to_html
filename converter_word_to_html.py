@@ -87,7 +87,7 @@ def is_ordered_list(paragraph, doc):
                     fmt = numFmt_elem.get(
                         '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val'
                     )
-                    return fmt != 'bullet'  # bullet → <ul>, иначе <ol>
+                    return fmt != 'bullet'  # bullet → <ul>, else <ol>
     except Exception as e:
         print(f"Ошибка определения типа списка: {e}")
         print(f"List type definition error: {e}")
@@ -151,6 +151,7 @@ def docx_to_html(input_file, output_file):
                 html_lines.append(f"</{list_type}>")
                 list_open = False
             html_lines.append(f"<h6>{content}</h6>")
+        # convert list: <ol> and <ul>    
         elif is_list_item:
             current_list_type = "ol" if is_ordered else "ul"
             if not list_open or list_type != current_list_type:
